@@ -1,8 +1,10 @@
 import WebSocket from 'ws';
+import { EventEmitter } from 'events';
 import { logger } from '../utils/logger.js';
 
-class BinanceFuturesWS {
+class BinanceFuturesWS extends EventEmitter {
   constructor() {
+    super();
     this.baseUrl = 'wss://fstream.binance.com/ws';
     this.ws = null;
     this.pingInterval = null;
@@ -81,7 +83,7 @@ class BinanceFuturesWS {
       l: k.l,
       v: k.v 
     };
-    logger.info(JSON.stringify(output));
+    this.emit('candle', output);
   }
 }
 export const binanceWs = new BinanceFuturesWS();
