@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# C build files
+*.o
+*.out
+*.so
+
+# Python
+__pycache__/
+*.pyc
+
+# Docker
+*.log
+
+# Env files
+.env
+
+# Next.js
+.next/
+out/
