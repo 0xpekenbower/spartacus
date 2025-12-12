@@ -1,9 +1,9 @@
 {
     "symbols": ["ETH/USDT"],
-    "timeframes": ["1m"],
+    "timeframes": ["15m"],
     "binance_url": "fstream.binance.com",
     "binance_path": "/ws",
-    "listen_port": 6060,
+    "listen_port": 6061,
     "buffer_size": 200,
     "indicators": {
         "ROC": {

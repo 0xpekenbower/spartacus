@@ -1,0 +1,90 @@
+{
+    "symbols": ["ETH/USDT"],
+    "timeframes": ["5m"],
+    "binance_url": "fstream.binance.com",
+    "binance_path": "/ws",
+    "listen_port": 6061,
+    "buffer_size": 1000,
+    "indicators": {
+        "RSI": {
+            "RSI_3": { "period": 3 },
+            "RSI_4": { "period": 4 },
+            "RSI_14": { "period": 14 },
+            "RSI_20": { "period": 20 },
+            "RSI_3_PCT": { "period": 3, "output": "change_pct" },
+            "RSI_14_PCT": { "period": 14, "output": "change_pct" }
+        },
+        "EMA": {
+            "EMA_3": { "period": 3 },
+            "EMA_9": { "period": 9 },
+            "EMA_12": { "period": 12 },
+            "EMA_16": { "period": 16 },
+            "EMA_20": { "period": 20 },
+            "EMA_26": { "period": 26 },
+            "EMA_50": { "period": 50 },
+            "EMA_100": { "period": 100 },
+            "EMA_200": { "period": 200 }
+        },
+        "SMA": {
+            "SMA_9": { "period": 9 },
+            "SMA_16": { "period": 16 },
+            "SMA_21": { "period": 21 },
+            "SMA_30": { "period": 30 },
+            "SMA_200": { "period": 200 }
+        },
+        "BBANDS": {
+            "BBANDS_20": { "period": 20, "devup": 2.0, "devdn": 2.0 },
+            "BBANDS_40": { "period": 40, "devup": 2.0, "devdn": 2.0 }
+        },
+        "MFI": {
+            "MFI_14": { "period": 14 }
+        },
+        "CMF": {
+            "CMF_20": { "period": 20 }
+        },
+        "WILLR": {
+            "WILLR_14": { "period": 14 },
+            "WILLR_480": { "period": 480 }
+        },
+        "AROON": {
+            "AROON_14": { "period": 14 }
+        },
+        "STOCHRSI": {
+            "STOCHRSI_14": { "period": 14, "fastk_period": 3, "fastd_period": 3 }
+        },
+        "KST": {
+            "KST": { 
+                "roc1": 10, "roc2": 15, "roc3": 20, "roc4": 30,
+                "sma1": 10, "sma2": 10, "sma3": 10, "sma4": 15,
+                "signal": 9
+            }
+        },
+        "OBV": {
+            "OBV": {},
+            "OBV_PCT": { "output": "change_pct" }
+        },
+        "ROC": {
+            "ROC_2": { "period": 2 },
+            "ROC_9": { "period": 9 }
+        },
+        "CANDLE_CHANGE": {
+            "CANDLE_CHANGE": {}
+        },
+        "CLOSE_DELTA": {
+            "CLOSE_DELTA": {}
+        },
+        "MAX": {
+            "MAX_CLOSE_6": { "period": 6, "source": "close" },
+            "MAX_CLOSE_12": { "period": 12, "source": "close" },
+            "MAX_CLOSE_48": { "period": 48, "source": "close" }
+        },
+        "MIN": {
+            "MIN_CLOSE_6": { "period": 6, "source": "close" },
+            "MIN_CLOSE_12": { "period": 12, "source": "close" },
+            "MIN_CLOSE_48": { "period": 48, "source": "close" }
+        },
+        "NUM_EMPTY": {
+            "NUM_EMPTY_288": { "period": 288 }
+        }
+    }
+}

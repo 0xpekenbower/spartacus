@@ -22,14 +22,17 @@ static struct lws_protocols protocols[] = {
 };
 
 int main(int argc, char **argv) {
-    (void)argc;
-    (void)argv;
     struct lws_context_creation_info info;
     memset(&info, 0, sizeof info);
 
     signal(SIGINT, sigint_handler);
 
-    if (load_config("config.json") != 0) {
+    const char *config_file = "config.json";
+    if (argc > 1) {
+        config_file = argv[1];
+    }
+
+    if (load_config(config_file) != 0) {
         return 1;
     }
 
