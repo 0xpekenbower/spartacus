@@ -16,36 +16,6 @@ services:
       - spartacus-network
     restart: unless-stopped
 
-  collector:
-    build: ./collector
-    container_name: spartacus_collector
-    depends_on:
-      - timescaledb
-    env_file:
-      - .env
-    environment:
-      - NODE_ENV=${NODE_ENV}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${POSTGRES_USER}
-      - DB_PASSWORD=${POSTGRES_PASSWORD}
-      - DB_NAME=${POSTGRES_DB}
-      - CALCULATION_URL=${CALCULATION_URL}
-    networks:
-      - spartacus-network
-    restart: unless-stopped
-
-  calculation:
-    build: ./calculation
-    container_name: spartacus_calculation
-    env_file:
-      - .env
-    environment:
-      - PORT=${CALCULATION_PORT}
-    networks:
-      - spartacus-network
-    restart: unless-stopped
-
 volumes:
   timescaledb_data:
 
