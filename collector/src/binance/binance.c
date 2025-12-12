@@ -197,7 +197,7 @@ void fetch_historical_data(struct lws_context *context) {
                 clean_sym[j] = '\0';
                 
                 char url[512];
-                snprintf(url, sizeof(url), "https://%s%s?symbol=%s&interval=%s&limit=1000", 
+                snprintf(url, sizeof(url), "https://%s%s?symbol=%s&interval=%s&limit=100", 
                          app_config.binance_rest_host, app_config.binance_rest_path, clean_sym, tf->valuestring);
                 
                 struct MemoryStruct chunk;
@@ -370,40 +370,10 @@ int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
                     Candle *linear_candles = malloc(sizeof(Candle) * buf_storage->count);
                     size_t count = circular_to_linear(buf_storage, linear_candles);
                     
-                    Indicators ind;
-                    calculate_indicators(linear_candles, count, &ind);
+                    cJSON *ind_json = calculate_indicators(linear_candles, count);
                     
-                    if (ind.valid) {
-                        char indicators_str[4096];
-                        snprintf(indicators_str, sizeof(indicators_str),
-                            "{"
-                            "\"EMA_14\":%.8f,\"SMA_14\":%.8f,\"WMA_14\":%.8f,\"KAMA_14\":%.8f,\"TEMA_14\":%.8f,\"TRIMA_14\":%.8f,\"SAR\":%.8f,"
-                            "\"RSI_14\":%.8f,\"MACD\":{\"macd\":%.8f,\"signal\":%.8f,\"hist\":%.8f},"
-                            "\"ADX_14\":%.8f,\"ADXR_14\":%.8f,\"APO\":%.8f,\"AROON\":{\"down\":%.8f,\"up\":%.8f},\"AROONOSC\":%.8f,"
-                            "\"BOP\":%.8f,\"CCI_14\":%.8f,\"CMO_14\":%.8f,\"DX_14\":%.8f,\"MFI_14\":%.8f,"
-                            "\"MINUS_DI\":%.8f,\"MINUS_DM\":%.8f,\"MOM_10\":%.8f,\"PLUS_DI\":%.8f,\"PLUS_DM\":%.8f,"
-                            "\"PPO\":%.8f,\"ROC_10\":%.8f,\"TRIX\":%.8f,\"ULTOSC\":%.8f,\"WILLR_14\":%.8f,"
-                            "\"STOCH\":{\"k\":%.8f,\"d\":%.8f},\"STOCHF\":{\"k\":%.8f,\"d\":%.8f},\"STOCHRSI\":{\"k\":%.8f,\"d\":%.8f},"
-                            "\"OBV\":%.8f,\"AD\":%.8f,\"ADOSC\":%.8f,"
-                            "\"BBANDS\":{\"upper\":%.8f,\"middle\":%.8f,\"lower\":%.8f},"
-                            "\"ATR_14\":%.8f,\"NATR_14\":%.8f,\"TRANGE\":%.8f,"
-                            "\"HT_DCPERIOD\":%.8f,\"HT_DCPHASE\":%.8f,\"HT_PHASOR\":{\"inphase\":%.8f,\"quadrature\":%.8f},"
-                            "\"HT_SINE\":{\"sine\":%.8f,\"leadsine\":%.8f},\"HT_TRENDMODE\":%.8f,"
-                            "\"CDL\":{\"DOJI\":%d,\"HAMMER\":%d,\"ENGULFING\":%d,\"MORNINGSTAR\":%d,\"EVENINGSTAR\":%d,\"3BLACKCROWS\":%d,\"3WHITESOLDIERS\":%d}"
-                            "}",
-                            ind.ema_14, ind.sma_14, ind.wma_14, ind.kama_14, ind.tema_14, ind.trima_14, ind.sar,
-                            ind.rsi_14, ind.macd.macd, ind.macd.signal, ind.macd.hist,
-                            ind.adx_14, ind.adxr_14, ind.apo, ind.aroon.aroon_down, ind.aroon.aroon_up, ind.aroonosc,
-                            ind.bop, ind.cci_14, ind.cmo_14, ind.dx_14, ind.mfi_14,
-                            ind.minus_di, ind.minus_dm, ind.mom_10, ind.plus_di, ind.plus_dm,
-                            ind.ppo, ind.roc_10, ind.trix, ind.ultosc, ind.willr_14,
-                            ind.stoch.k, ind.stoch.d, ind.stochf.k, ind.stochf.d, ind.stochrsi.k, ind.stochrsi.d,
-                            ind.obv, ind.ad, ind.adosc,
-                            ind.bbands.upper, ind.bbands.middle, ind.bbands.lower,
-                            ind.atr_14, ind.natr_14, ind.trange,
-                            ind.ht_dcperiod, ind.ht_dcphase, ind.ht_phasor.inphase, ind.ht_phasor.quadrature,
-                            ind.ht_sine.sine, ind.ht_sine.leadsine, ind.ht_trendmode,
-                            ind.cdl_doji, ind.cdl_hammer, ind.cdl_engulfing, ind.cdl_morningstar, ind.cdl_eveningstar, ind.cdl_3blackcrows, ind.cdl_3whitesoldiers);
+                    if (ind_json) {
+                        char *indicators_str = cJSON_PrintUnformatted(ind_json);
                         
                         // Create combined message manually
                         size_t combined_len = strlen(stream_name) + strlen(candle_json) + strlen(indicators_str) + 64;
@@ -416,6 +386,8 @@ int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
                         broadcast_msg(combined_str);
                         
                         free(combined_str);
+                        free(indicators_str);
+                        cJSON_Delete(ind_json);
                     } else {
                         broadcast_msg(candle_json);
                     }

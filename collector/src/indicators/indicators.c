@@ -1,7 +1,9 @@
 #include "indicators.h"
+#include "../config/config.h"
 #include <ta-lib/ta_libc.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 static double* extract_series(Candle *candles, size_t count, char field) {
     double *series = malloc(sizeof(double) * count);
@@ -19,10 +21,30 @@ static double* extract_series(Candle *candles, size_t count, char field) {
     return series;
 }
 
-void calculate_indicators(Candle *candles, size_t count, Indicators *out) {
-    if (!out) return;
-    out->valid = 0;
-    if (!candles || count < 30) return; 
+static int get_int_param(cJSON *item, const char *key, int default_val) {
+    if (cJSON_IsNumber(item)) return item->valueint;
+    if (cJSON_IsObject(item)) {
+        cJSON *val = cJSON_GetObjectItem(item, key);
+        if (val && cJSON_IsNumber(val)) return val->valueint;
+    }
+    return default_val;
+}
+
+static double get_double_param(cJSON *item, const char *key, double default_val) {
+    if (cJSON_IsNumber(item)) return item->valuedouble;
+    if (cJSON_IsObject(item)) {
+        cJSON *val = cJSON_GetObjectItem(item, key);
+        if (val && cJSON_IsNumber(val)) return val->valuedouble;
+    }
+    return default_val;
+}
+
+cJSON* calculate_indicators(Candle *candles, size_t count) {
+    if (!candles || count < 30) return NULL;
+    if (!app_config.json) return NULL;
+
+    cJSON *indicators_config = cJSON_GetObjectItem(app_config.json, "indicators");
+    if (!indicators_config) return NULL;
 
     double *open = extract_series(candles, count, 'o');
     double *high = extract_series(candles, count, 'h');
@@ -36,248 +58,357 @@ void calculate_indicators(Candle *candles, size_t count, Indicators *out) {
         if(low) free(low);
         if(close) free(close);
         if(volume) free(volume);
-        return;
+        return NULL;
     }
 
-    int outBeg, outNbElement;
-    TA_RetCode ret;
+    cJSON *result = cJSON_CreateObject();
+    cJSON *indicator_type = NULL;
 
-    double *outReal = malloc(sizeof(double) * count);
-    ret = TA_EMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->ema_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
+    cJSON_ArrayForEach(indicator_type, indicators_config) {
+        char *type = indicator_type->string;
+        cJSON *outputs = indicator_type;
+        
+        cJSON *output = NULL;
+        cJSON_ArrayForEach(output, outputs) {
+            char *output_name = output->string;
+            int outBeg, outNbElement;
+            TA_RetCode ret = TA_SUCCESS;
+            double *outReal = malloc(sizeof(double) * count);
+            
+            if (strcmp(type, "EMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_EMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "SMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_SMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "WMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_WMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "KAMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_KAMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "TEMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_TEMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "TRIMA") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_TRIMA(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "SAR") == 0) {
+                double accel = get_double_param(output, "acceleration", 0.02);
+                double max = get_double_param(output, "maximum", 0.2);
+                ret = TA_SAR(0, count - 1, high, low, accel, max, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "RSI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_RSI(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "ADX") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_ADX(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "ADXR") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_ADXR(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "APO") == 0) {
+                int fast = get_int_param(output, "fast", 12);
+                int slow = get_int_param(output, "slow", 26);
+                ret = TA_APO(0, count - 1, close, fast, slow, TA_MAType_SMA, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "AROON") == 0) {
+                int period = get_int_param(output, "period", 14);
+                double *outAroonDown = malloc(sizeof(double) * count);
+                double *outAroonUp = malloc(sizeof(double) * count);
+                ret = TA_AROON(0, count - 1, high, low, period, &outBeg, &outNbElement, outAroonDown, outAroonUp);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *aroon = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(aroon, "down", outAroonDown[outNbElement - 1]);
+                    cJSON_AddNumberToObject(aroon, "up", outAroonUp[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, aroon);
+                }
+                free(outAroonDown);
+                free(outAroonUp);
+            }
+            else if (strcmp(type, "AROONOSC") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_AROONOSC(0, count - 1, high, low, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "BOP") == 0) {
+                ret = TA_BOP(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "CCI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_CCI(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "CMO") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_CMO(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "DX") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_DX(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "MFI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_MFI(0, count - 1, high, low, close, volume, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "MINUS_DI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_MINUS_DI(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "MINUS_DM") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_MINUS_DM(0, count - 1, high, low, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "MOM") == 0) {
+                int period = get_int_param(output, "period", 10);
+                ret = TA_MOM(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "PLUS_DI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_PLUS_DI(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "PLUS_DM") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_PLUS_DM(0, count - 1, high, low, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "PPO") == 0) {
+                int fast = get_int_param(output, "fast", 12);
+                int slow = get_int_param(output, "slow", 26);
+                ret = TA_PPO(0, count - 1, close, fast, slow, TA_MAType_SMA, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "ROC") == 0) {
+                int period = get_int_param(output, "period", 10);
+                ret = TA_ROC(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "TRIX") == 0) {
+                int period = get_int_param(output, "period", 30);
+                ret = TA_TRIX(0, count - 1, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "ULTOSC") == 0) {
+                int t1 = get_int_param(output, "timeperiod1", 7);
+                int t2 = get_int_param(output, "timeperiod2", 14);
+                int t3 = get_int_param(output, "timeperiod3", 28);
+                ret = TA_ULTOSC(0, count - 1, high, low, close, t1, t2, t3, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "WILLR") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_WILLR(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "MACD") == 0) {
+                int fast = get_int_param(output, "fast", 12);
+                int slow = get_int_param(output, "slow", 26);
+                int signal = get_int_param(output, "signal", 9);
+                double *outMACD = malloc(sizeof(double) * count);
+                double *outMACDSignal = malloc(sizeof(double) * count);
+                double *outMACDHist = malloc(sizeof(double) * count);
+                ret = TA_MACD(0, count - 1, close, fast, slow, signal, &outBeg, &outNbElement, outMACD, outMACDSignal, outMACDHist);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *macd = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(macd, "macd", outMACD[outNbElement - 1]);
+                    cJSON_AddNumberToObject(macd, "signal", outMACDSignal[outNbElement - 1]);
+                    cJSON_AddNumberToObject(macd, "hist", outMACDHist[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, macd);
+                }
+                free(outMACD); free(outMACDSignal); free(outMACDHist);
+            }
+            else if (strcmp(type, "STOCH") == 0) {
+                int fastk = get_int_param(output, "fastk_period", 5);
+                int slowk = get_int_param(output, "slowk_period", 3);
+                int slowd = get_int_param(output, "slowd_period", 3);
+                double *outSlowK = malloc(sizeof(double) * count);
+                double *outSlowD = malloc(sizeof(double) * count);
+                ret = TA_STOCH(0, count - 1, high, low, close, fastk, slowk, TA_MAType_SMA, slowd, TA_MAType_SMA, &outBeg, &outNbElement, outSlowK, outSlowD);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *stoch = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(stoch, "k", outSlowK[outNbElement - 1]);
+                    cJSON_AddNumberToObject(stoch, "d", outSlowD[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, stoch);
+                }
+                free(outSlowK); free(outSlowD);
+            }
+            else if (strcmp(type, "STOCHF") == 0) {
+                int fastk = get_int_param(output, "fastk_period", 5);
+                int fastd = get_int_param(output, "fastd_period", 3);
+                double *outFastK = malloc(sizeof(double) * count);
+                double *outFastD = malloc(sizeof(double) * count);
+                ret = TA_STOCHF(0, count - 1, high, low, close, fastk, fastd, TA_MAType_SMA, &outBeg, &outNbElement, outFastK, outFastD);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *stochf = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(stochf, "k", outFastK[outNbElement - 1]);
+                    cJSON_AddNumberToObject(stochf, "d", outFastD[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, stochf);
+                }
+                free(outFastK); free(outFastD);
+            }
+            else if (strcmp(type, "STOCHRSI") == 0) {
+                int period = get_int_param(output, "period", 14);
+                int fastk = get_int_param(output, "fastk_period", 5);
+                int fastd = get_int_param(output, "fastd_period", 3);
+                double *outSlowK = malloc(sizeof(double) * count);
+                double *outSlowD = malloc(sizeof(double) * count);
+                ret = TA_STOCHRSI(0, count - 1, close, period, fastk, fastd, TA_MAType_SMA, &outBeg, &outNbElement, outSlowK, outSlowD);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *stochrsi = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(stochrsi, "k", outSlowK[outNbElement - 1]);
+                    cJSON_AddNumberToObject(stochrsi, "d", outSlowD[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, stochrsi);
+                }
+                free(outSlowK); free(outSlowD);
+            }
+            else if (strcmp(type, "OBV") == 0) {
+                ret = TA_OBV(0, count - 1, close, volume, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "AD") == 0) {
+                ret = TA_AD(0, count - 1, high, low, close, volume, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "ADOSC") == 0) {
+                int fast = get_int_param(output, "fast", 3);
+                int slow = get_int_param(output, "slow", 10);
+                ret = TA_ADOSC(0, count - 1, high, low, close, volume, fast, slow, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "BBANDS") == 0) {
+                int period = get_int_param(output, "period", 20);
+                double devup = get_double_param(output, "devup", 2.0);
+                double devdn = get_double_param(output, "devdn", 2.0);
+                double *outUpper = malloc(sizeof(double) * count);
+                double *outMiddle = malloc(sizeof(double) * count);
+                double *outLower = malloc(sizeof(double) * count);
+                ret = TA_BBANDS(0, count - 1, close, period, devup, devdn, TA_MAType_SMA, &outBeg, &outNbElement, outUpper, outMiddle, outLower);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *bbands = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(bbands, "upper", outUpper[outNbElement - 1]);
+                    cJSON_AddNumberToObject(bbands, "middle", outMiddle[outNbElement - 1]);
+                    cJSON_AddNumberToObject(bbands, "lower", outLower[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, bbands);
+                }
+                free(outUpper); free(outMiddle); free(outLower);
+            }
+            else if (strcmp(type, "ATR") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_ATR(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "NATR") == 0) {
+                int period = get_int_param(output, "period", 14);
+                ret = TA_NATR(0, count - 1, high, low, close, period, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "TRANGE") == 0) {
+                ret = TA_TRANGE(0, count - 1, high, low, close, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "HT_DCPERIOD") == 0) {
+                ret = TA_HT_DCPERIOD(0, count - 1, close, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "HT_DCPHASE") == 0) {
+                ret = TA_HT_DCPHASE(0, count - 1, close, &outBeg, &outNbElement, outReal);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outReal[outNbElement - 1]);
+            }
+            else if (strcmp(type, "HT_TRENDMODE") == 0) {
+                int *outInteger = malloc(sizeof(int) * count);
+                ret = TA_HT_TRENDMODE(0, count - 1, close, &outBeg, &outNbElement, outInteger);
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outInteger[outNbElement - 1]);
+                free(outInteger);
+            }
+            else if (strcmp(type, "HT_PHASOR") == 0) {
+                double *outInPhase = malloc(sizeof(double) * count);
+                double *outQuadrature = malloc(sizeof(double) * count);
+                ret = TA_HT_PHASOR(0, count - 1, close, &outBeg, &outNbElement, outInPhase, outQuadrature);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *phasor = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(phasor, "inphase", outInPhase[outNbElement - 1]);
+                    cJSON_AddNumberToObject(phasor, "quadrature", outQuadrature[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, phasor);
+                }
+                free(outInPhase); free(outQuadrature);
+            }
+            else if (strcmp(type, "HT_SINE") == 0) {
+                double *outSine = malloc(sizeof(double) * count);
+                double *outLeadSine = malloc(sizeof(double) * count);
+                ret = TA_HT_SINE(0, count - 1, close, &outBeg, &outNbElement, outSine, outLeadSine);
+                if (ret == TA_SUCCESS && outNbElement > 0) {
+                    cJSON *sine = cJSON_CreateObject();
+                    cJSON_AddNumberToObject(sine, "sine", outSine[outNbElement - 1]);
+                    cJSON_AddNumberToObject(sine, "leadsine", outLeadSine[outNbElement - 1]);
+                    cJSON_AddItemToObject(result, output_name, sine);
+                }
+                free(outSine); free(outLeadSine);
+            }
+            else if (strncmp(type, "CDL", 3) == 0) {
+                int *outInt = malloc(sizeof(int) * count);
+                if (strcmp(type, "CDLDOJI") == 0) ret = TA_CDLDOJI(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDLHAMMER") == 0) ret = TA_CDLHAMMER(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDLENGULFING") == 0) ret = TA_CDLENGULFING(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDLMORNINGSTAR") == 0) ret = TA_CDLMORNINGSTAR(0, count - 1, open, high, low, close, 0.3, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDLEVENINGSTAR") == 0) ret = TA_CDLEVENINGSTAR(0, count - 1, open, high, low, close, 0.3, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDL3BLACKCROWS") == 0) ret = TA_CDL3BLACKCROWS(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
+                else if (strcmp(type, "CDL3WHITESOLDIERS") == 0) ret = TA_CDL3WHITESOLDIERS(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
+                
+                if (ret == TA_SUCCESS && outNbElement > 0) cJSON_AddNumberToObject(result, output_name, outInt[outNbElement - 1]);
+                free(outInt);
+            }
+            else if (strcmp(type, "CMF") == 0) {
+                int period = get_int_param(output, "period", 20);
+                double cmf_sum = 0.0;
+                double vol_sum = 0.0;
+                for (int i = count - period; i < count; i++) {
+                    if (i >= 0) {
+                        double hlc3 = ((high[i] - low[i]) != 0) ? ((close[i] - low[i]) - (high[i] - close[i])) / (high[i] - low[i]) : 0;
+                        cmf_sum += hlc3 * volume[i];
+                        vol_sum += volume[i];
+                    }
+                }
+                double cmf = (vol_sum != 0) ? (cmf_sum / vol_sum) : 0;
+                cJSON_AddNumberToObject(result, output_name, cmf);
+            }
 
-    ret = TA_SMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->sma_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_WMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->wma_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_KAMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->kama_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_TEMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->tema_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_TRIMA(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->trima_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_SAR(0, count - 1, high, low, 0.02, 0.2, &outBeg, &outNbElement, outReal);
-    out->sar = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_RSI(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->rsi_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_ADX(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->adx_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_ADXR(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->adxr_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_APO(0, count - 1, close, 12, 26, TA_MAType_SMA, &outBeg, &outNbElement, outReal);
-    out->apo = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    double *outAroonDown = malloc(sizeof(double) * count);
-    double *outAroonUp = malloc(sizeof(double) * count);
-    ret = TA_AROON(0, count - 1, high, low, 14, &outBeg, &outNbElement, outAroonDown, outAroonUp);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->aroon.aroon_down = outAroonDown[outNbElement - 1];
-        out->aroon.aroon_up = outAroonUp[outNbElement - 1];
-    } else {
-        out->aroon.aroon_down = 0;
-        out->aroon.aroon_up = 0;
+            free(outReal);
+        }
     }
-    free(outAroonDown);
-    free(outAroonUp);
-
-    // AROONOSC
-    ret = TA_AROONOSC(0, count - 1, high, low, 14, &outBeg, &outNbElement, outReal);
-    out->aroonosc = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    // BOP
-    ret = TA_BOP(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outReal);
-    out->bop = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    // CCI 14
-    ret = TA_CCI(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->cci_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_CMO(0, count - 1, close, 14, &outBeg, &outNbElement, outReal);
-    out->cmo_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_DX(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->dx_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_MFI(0, count - 1, high, low, close, volume, 14, &outBeg, &outNbElement, outReal);
-    out->mfi_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_MINUS_DI(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->minus_di = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_MINUS_DM(0, count - 1, high, low, 14, &outBeg, &outNbElement, outReal);
-    out->minus_dm = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_MOM(0, count - 1, close, 10, &outBeg, &outNbElement, outReal);
-    out->mom_10 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_PLUS_DI(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->plus_di = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_PLUS_DM(0, count - 1, high, low, 14, &outBeg, &outNbElement, outReal);
-    out->plus_dm = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_PPO(0, count - 1, close, 12, 26, TA_MAType_SMA, &outBeg, &outNbElement, outReal);
-    out->ppo = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_ROC(0, count - 1, close, 10, &outBeg, &outNbElement, outReal);
-    out->roc_10 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_TRIX(0, count - 1, close, 30, &outBeg, &outNbElement, outReal);
-    out->trix = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_ULTOSC(0, count - 1, high, low, close, 7, 14, 28, &outBeg, &outNbElement, outReal);
-    out->ultosc = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_WILLR(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->willr_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    double *outMACD = malloc(sizeof(double) * count);
-    double *outMACDSignal = malloc(sizeof(double) * count);
-    double *outMACDHist = malloc(sizeof(double) * count);
-    ret = TA_MACD(0, count - 1, close, 12, 26, 9, &outBeg, &outNbElement, outMACD, outMACDSignal, outMACDHist);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->macd.macd = outMACD[outNbElement - 1];
-        out->macd.signal = outMACDSignal[outNbElement - 1];
-        out->macd.hist = outMACDHist[outNbElement - 1];
-    } else {
-        out->macd.macd = 0; out->macd.signal = 0; out->macd.hist = 0;
-    }
-    free(outMACD); free(outMACDSignal); free(outMACDHist);
-
-    double *outSlowK = malloc(sizeof(double) * count);
-    double *outSlowD = malloc(sizeof(double) * count);
-    ret = TA_STOCH(0, count - 1, high, low, close, 5, 3, TA_MAType_SMA, 3, TA_MAType_SMA, &outBeg, &outNbElement, outSlowK, outSlowD);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->stoch.k = outSlowK[outNbElement - 1];
-        out->stoch.d = outSlowD[outNbElement - 1];
-    } else {
-        out->stoch.k = 0; out->stoch.d = 0;
-    }
-    
-    double *outFastK = malloc(sizeof(double) * count);
-    double *outFastD = malloc(sizeof(double) * count);
-    ret = TA_STOCHF(0, count - 1, high, low, close, 5, 3, TA_MAType_SMA, &outBeg, &outNbElement, outFastK, outFastD);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->stochf.k = outFastK[outNbElement - 1];
-        out->stochf.d = outFastD[outNbElement - 1];
-    } else {
-        out->stochf.k = 0; out->stochf.d = 0;
-    }
-    free(outFastK); free(outFastD);
-
-    ret = TA_STOCHRSI(0, count - 1, close, 14, 5, 3, TA_MAType_SMA, &outBeg, &outNbElement, outSlowK, outSlowD);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->stochrsi.k = outSlowK[outNbElement - 1];
-        out->stochrsi.d = outSlowD[outNbElement - 1];
-    } else {
-        out->stochrsi.k = 0; out->stochrsi.d = 0;
-    }
-    free(outSlowK); free(outSlowD);
-
-    ret = TA_OBV(0, count - 1, close, volume, &outBeg, &outNbElement, outReal);
-    out->obv = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_AD(0, count - 1, high, low, close, volume, &outBeg, &outNbElement, outReal);
-    out->ad = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_ADOSC(0, count - 1, high, low, close, volume, 3, 10, &outBeg, &outNbElement, outReal);
-    out->adosc = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    double *outUpper = malloc(sizeof(double) * count);
-    double *outMiddle = malloc(sizeof(double) * count);
-    double *outLower = malloc(sizeof(double) * count);
-    ret = TA_BBANDS(0, count - 1, close, 20, 2.0, 2.0, TA_MAType_SMA, &outBeg, &outNbElement, outUpper, outMiddle, outLower);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->bbands.upper = outUpper[outNbElement - 1];
-        out->bbands.middle = outMiddle[outNbElement - 1];
-        out->bbands.lower = outLower[outNbElement - 1];
-    } else {
-        out->bbands.upper = 0; out->bbands.middle = 0; out->bbands.lower = 0;
-    }
-    free(outUpper); free(outMiddle); free(outLower);
-
-    ret = TA_ATR(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->atr_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_NATR(0, count - 1, high, low, close, 14, &outBeg, &outNbElement, outReal);
-    out->natr_14 = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_TRANGE(0, count - 1, high, low, close, &outBeg, &outNbElement, outReal);
-    out->trange = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_HT_DCPERIOD(0, count - 1, close, &outBeg, &outNbElement, outReal);
-    out->ht_dcperiod = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    ret = TA_HT_DCPHASE(0, count - 1, close, &outBeg, &outNbElement, outReal);
-    out->ht_dcphase = (ret == TA_SUCCESS && outNbElement > 0) ? outReal[outNbElement - 1] : 0;
-
-    int *outInteger = malloc(sizeof(int) * count);
-    ret = TA_HT_TRENDMODE(0, count - 1, close, &outBeg, &outNbElement, outInteger);
-    out->ht_trendmode = (ret == TA_SUCCESS && outNbElement > 0) ? (double)outInteger[outNbElement - 1] : 0;
-    free(outInteger);
-
-    double *outInPhase = malloc(sizeof(double) * count);
-    double *outQuadrature = malloc(sizeof(double) * count);
-    ret = TA_HT_PHASOR(0, count - 1, close, &outBeg, &outNbElement, outInPhase, outQuadrature);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->ht_phasor.inphase = outInPhase[outNbElement - 1];
-        out->ht_phasor.quadrature = outQuadrature[outNbElement - 1];
-    } else {
-        out->ht_phasor.inphase = 0; out->ht_phasor.quadrature = 0;
-    }
-    free(outInPhase); free(outQuadrature);
-
-    double *outSine = malloc(sizeof(double) * count);
-    double *outLeadSine = malloc(sizeof(double) * count);
-    ret = TA_HT_SINE(0, count - 1, close, &outBeg, &outNbElement, outSine, outLeadSine);
-    if (ret == TA_SUCCESS && outNbElement > 0) {
-        out->ht_sine.sine = outSine[outNbElement - 1];
-        out->ht_sine.leadsine = outLeadSine[outNbElement - 1];
-    } else {
-        out->ht_sine.sine = 0; out->ht_sine.leadsine = 0;
-    }
-    free(outSine); free(outLeadSine);
-
-    int *outInt = malloc(sizeof(int) * count);
-    
-    ret = TA_CDLDOJI(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
-    out->cdl_doji = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDLHAMMER(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
-    out->cdl_hammer = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDLENGULFING(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
-    out->cdl_engulfing = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDLMORNINGSTAR(0, count - 1, open, high, low, close, 0.3, &outBeg, &outNbElement, outInt);
-    out->cdl_morningstar = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDLEVENINGSTAR(0, count - 1, open, high, low, close, 0.3, &outBeg, &outNbElement, outInt);
-    out->cdl_eveningstar = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDL3BLACKCROWS(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
-    out->cdl_3blackcrows = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    ret = TA_CDL3WHITESOLDIERS(0, count - 1, open, high, low, close, &outBeg, &outNbElement, outInt);
-    out->cdl_3whitesoldiers = (ret == TA_SUCCESS && outNbElement > 0) ? outInt[outNbElement - 1] : 0;
-
-    free(outInt);
-    free(outReal);
-
-    out->valid = 1;
 
     free(open);
     free(high);
     free(low);
     free(close);
     free(volume);
+    
+    return result;
 }

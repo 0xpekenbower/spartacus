@@ -4,5 +4,24 @@
     "binance_url": "fstream.binance.com",
     "binance_path": "/ws",
     "listen_port": 6060,
-    "buffer_size": 1000
+    "buffer_size": 200,
+    "indicators": {
+        "ROC": {
+            "ROC_9": 9,
+            "ROC_2": 2
+        },
+        "RSI": {
+            "RSI_14": 14,
+            "RSI_3": 3
+        },
+        "CMF": {
+            "CMF_20": 20
+        },
+        "SMA": {
+            "SMA_14": 14
+        },
+        "EMA": {
+            "EMA_14": 14
+        }
+    }
 }

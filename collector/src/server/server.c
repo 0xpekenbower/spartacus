@@ -5,6 +5,7 @@
 static struct per_session_data__server *client_list = NULL;
 
 void broadcast_msg(const char *msg) {
+    // printf("%s\n",msg);
     struct per_session_data__server *pss = client_list;
     while (pss) {
         mq_push(&pss->msg_q_head, &pss->msg_q_tail, msg);
