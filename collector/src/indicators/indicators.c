@@ -48,11 +48,18 @@ static char* get_string_param(cJSON *item, const char *key, char *default_val) {
     return default_val;
 }
 
-static double* get_series_by_name(char *type, double *open, double *high, double *low, double *close, double *volume) {
+static double* get_series_by_name(char *type, double *open, double *high, double *low, double *close, double *volume, size_t count) {
     if (strcmp(type, "open") == 0) return open;
     if (strcmp(type, "high") == 0) return high;
     if (strcmp(type, "low") == 0) return low;
     if (strcmp(type, "volume") == 0) return volume;
+    if (strcmp(type, "change_pct") == 0) {
+        double *change = malloc(sizeof(double) * count);
+        for (size_t i = 0; i < count; i++) {
+            change[i] = (open[i] != 0) ? ((close[i] - open[i]) / open[i] * 100.0) : 0;
+        }
+        return change;
+    }
     return close;
 }
 
@@ -443,14 +450,16 @@ cJSON* calculate_indicators(Candle *candles, size_t count) {
             else if (strcmp(type, "MAX") == 0) {
                 int period = get_int_param(output, "period", 14);
                 char *source = get_string_param(output, "source", "close");
-                double *src = get_series_by_name(source, open, high, low, close, volume);
+                double *src = get_series_by_name(source, open, high, low, close, volume, count);
                 ret = TA_MAX(0, count - 1, src, period, &outBeg, &outNbElement, outReal);
+                if (strcmp(source, "change_pct") == 0) free(src);
             }
             else if (strcmp(type, "MIN") == 0) {
                 int period = get_int_param(output, "period", 14);
                 char *source = get_string_param(output, "source", "close");
-                double *src = get_series_by_name(source, open, high, low, close, volume);
+                double *src = get_series_by_name(source, open, high, low, close, volume, count);
                 ret = TA_MIN(0, count - 1, src, period, &outBeg, &outNbElement, outReal);
+                if (strcmp(source, "change_pct") == 0) free(src);
             }
             else if (strcmp(type, "NUM_EMPTY") == 0) {
                 int period = get_int_param(output, "period", 288);
@@ -470,6 +479,24 @@ cJSON* calculate_indicators(Candle *candles, size_t count) {
             else if (strcmp(type, "CANDLE_CHANGE") == 0) {
                 double change = (open[count - 1] != 0) ? ((close[count - 1] - open[count - 1]) / open[count - 1] * 100.0) : 0;
                 cJSON_AddNumberToObject(result, output_name, change);
+                ret = TA_INTERNAL_ERROR;
+            }
+            else if (strcmp(type, "WICKS") == 0) {
+                char *output_mode = get_string_param(output, "output", "top_pct");
+                double val = 0;
+                double o = open[count - 1];
+                double c = close[count - 1];
+                double h = high[count - 1];
+                double l = low[count - 1];
+                double max_oc = (o > c) ? o : c;
+                double min_oc = (o < c) ? o : c;
+
+                if (strcmp(output_mode, "top_pct") == 0) {
+                    val = (max_oc != 0) ? ((h - max_oc) / max_oc * 100.0) : 0;
+                } else if (strcmp(output_mode, "bot_pct") == 0) {
+                    val = (min_oc != 0) ? (fabs(l - min_oc) / min_oc * 100.0) : 0;
+                }
+                cJSON_AddNumberToObject(result, output_name, val);
                 ret = TA_INTERNAL_ERROR;
             }
             else if (strcmp(type, "KST") == 0) {
@@ -557,6 +584,13 @@ cJSON* calculate_indicators(Candle *candles, size_t count) {
                     if (outNbElement >= 2) {
                         double prev = outReal[outNbElement - 2];
                         val = (prev != 0) ? ((val - prev) / fabs(prev) * 100.0) : 0;
+                    } else {
+                        val = 0;
+                    }
+                } else if (strcmp(output_mode, "diff") == 0) {
+                    if (outNbElement >= 2) {
+                        double prev = outReal[outNbElement - 2];
+                        val = val - prev;
                     } else {
                         val = 0;
                     }

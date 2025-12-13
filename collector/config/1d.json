@@ -1,0 +1,62 @@
+{
+    "symbols": ["ETH/USDT"],
+    "timeframes": ["1d"],
+    "binance_url": "fstream.binance.com",
+    "binance_path": "/ws",
+    "listen_port": 6065,
+    "buffer_size": 1000,
+    "indicators": {
+        "RSI": {
+            "RSI_3": { "period": 3 },
+            "RSI_14": { "period": 14 },
+            "RSI_3_PCT": { "period": 3, "output": "change_pct" },
+            "RSI_14_PCT": { "period": 14, "output": "change_pct" },
+            "RSI_3_DIFF": { "period": 3, "output": "diff" },
+            "RSI_14_DIFF": { "period": 14, "output": "diff" }
+        },
+        "BBANDS": {
+            "BBANDS_20": { "period": 20, "devup": 2.0, "devdn": 2.0 }
+        },
+        "MFI": {
+            "MFI_14": { "period": 14 }
+        },
+        "CMF": {
+            "CMF_20": { "period": 20 }
+        },
+        "WILLR": {
+            "WILLR_14": { "period": 14 }
+        },
+        "AROON": {
+            "AROON_14": { "period": 14 }
+        },
+        "STOCH": {
+            "STOCH_14_3_3": { "fastk_period": 14, "slowk_period": 3, "slowd_period": 3 }
+        },
+        "STOCHRSI": {
+            "STOCHRSI_14": { "period": 14, "fastk_period": 14, "fastd_period": 3 }
+        },
+        "ROC": {
+            "ROC_2": { "period": 2 },
+            "ROC_9": { "period": 9 }
+        },
+        "CANDLE_CHANGE": {
+            "CANDLE_CHANGE": {}
+        },
+        "WICKS": {
+            "TOP_WICK_PCT": { "output": "top_pct" },
+            "BOT_WICK_PCT": { "output": "bot_pct" }
+        },
+        "MAX": {
+            "MAX_HIGH_6": { "period": 6, "source": "high" },
+            "MAX_HIGH_12": { "period": 12, "source": "high" },
+            "MAX_HIGH_20": { "period": 20, "source": "high" },
+            "MAX_HIGH_30": { "period": 30, "source": "high" }
+        },
+        "MIN": {
+            "MIN_LOW_6": { "period": 6, "source": "low" },
+            "MIN_LOW_12": { "period": 12, "source": "low" },
+            "MIN_LOW_20": { "period": 20, "source": "low" },
+            "MIN_LOW_30": { "period": 30, "source": "low" }
+        }
+    }
+}
