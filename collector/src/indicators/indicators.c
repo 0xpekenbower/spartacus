@@ -70,6 +70,14 @@ cJSON* calculate_indicators(Candle *candles, size_t count) {
     cJSON *indicators_config = cJSON_GetObjectItem(app_config.json, "indicators");
     if (!indicators_config) return NULL;
 
+    // Try to find timeframe specific config
+    if (candles[0].i[0]) {
+        cJSON *tf_config = cJSON_GetObjectItem(indicators_config, candles[0].i);
+        if (tf_config) {
+            indicators_config = tf_config;
+        }
+    }
+
     double *open = extract_series(candles, count, 'o');
     double *high = extract_series(candles, count, 'h');
     double *low = extract_series(candles, count, 'l');

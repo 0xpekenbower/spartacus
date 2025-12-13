@@ -3,7 +3,12 @@
 
 #include <libwebsockets.h>
 
-extern struct lws *wsi_binance;
+// extern struct lws *wsi_binance;
+
+typedef struct {
+    struct lws *wsi;
+    char timeframe[16];
+} binance_client_t;
 
 int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
                      void *user, void *in, size_t len);

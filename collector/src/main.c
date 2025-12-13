@@ -59,6 +59,18 @@ int main(int argc, char **argv) {
 
     fetch_historical_data(context);
 
+    cJSON *timeframes = cJSON_GetObjectItem(app_config.json, "timeframes");
+    int tf_count = cJSON_GetArraySize(timeframes);
+    binance_client_t *clients = malloc(sizeof(binance_client_t) * tf_count);
+    
+    int idx = 0;
+    cJSON *tf = NULL;
+    cJSON_ArrayForEach(tf, timeframes) {
+        clients[idx].wsi = NULL;
+        strncpy(clients[idx].timeframe, tf->valuestring, 15);
+        idx++;
+    }
+
     struct lws_client_connect_info cc_binance;
     memset(&cc_binance, 0, sizeof cc_binance);
     cc_binance.context = context;
@@ -69,15 +81,19 @@ int main(int argc, char **argv) {
     cc_binance.origin = cc_binance.address;
     cc_binance.ssl_connection = LCCSCF_USE_SSL;
     cc_binance.protocol = "binance-protocol";
-    cc_binance.pwsi = &wsi_binance;
 
     while (!interrupted) {
-        if (!wsi_binance) {
-            lws_client_connect_via_info(&cc_binance);
+        for (int i = 0; i < tf_count; i++) {
+            if (!clients[i].wsi) {
+                cc_binance.userdata = &clients[i];
+                cc_binance.pwsi = &clients[i].wsi;
+                lws_client_connect_via_info(&cc_binance);
+            }
         }
         lws_service(context, 1000);
     }
 
+    free(clients);
     lws_context_destroy(context);
     free_storage();
     free_config();

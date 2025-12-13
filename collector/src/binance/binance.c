@@ -150,7 +150,7 @@ int is_candle_closed_avx2(const char* json) {
     return *ptr == 't';
 }
 
-struct lws *wsi_binance = NULL;
+// struct lws *wsi_binance = NULL;
 
 struct MemoryStruct {
   char *memory;
@@ -264,31 +264,27 @@ void fetch_historical_data(struct lws_context *context) {
     curl_global_cleanup();
 }
 
-static char *get_subscribe_payload() {
+static char *get_subscribe_payload(const char *target_tf) {
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "method", "SUBSCRIBE");
     cJSON *params = cJSON_CreateArray();
     
     cJSON *symbols = cJSON_GetObjectItem(app_config.json, "symbols");
-    cJSON *timeframes = cJSON_GetObjectItem(app_config.json, "timeframes");
     
     cJSON *sym = NULL;
     cJSON_ArrayForEach(sym, symbols) {
-        cJSON *tf = NULL;
-        cJSON_ArrayForEach(tf, timeframes) {
-            char stream[128];
-            // Convert BTC/USDT to btcusdt
-            char *s = sym->valuestring;
-            char clean_sym[64];
-            int j = 0;
-            for(int i=0; s[i]; i++) {
-                if(s[i] != '/') clean_sym[j++] = tolower(s[i]);
-            }
-            clean_sym[j] = '\0';
-            
-            snprintf(stream, sizeof(stream), "%s@kline_%s", clean_sym, tf->valuestring);
-            cJSON_AddItemToArray(params, cJSON_CreateString(stream));
+        char stream[128];
+        // Convert BTC/USDT to btcusdt
+        char *s = sym->valuestring;
+        char clean_sym[64];
+        int j = 0;
+        for(int i=0; s[i]; i++) {
+            if(s[i] != '/') clean_sym[j++] = tolower(s[i]);
         }
+        clean_sym[j] = '\0';
+        
+        snprintf(stream, sizeof(stream), "%s@kline_%s", clean_sym, target_tf);
+        cJSON_AddItemToArray(params, cJSON_CreateString(stream));
     }
     
     cJSON_AddItemToObject(root, "params", params);
@@ -301,22 +297,25 @@ static char *get_subscribe_payload() {
 
 int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
                      void *user, void *in, size_t len) {
-    (void)user;
+    binance_client_t *client = (binance_client_t *)user;
     (void)len;
     switch (reason) {
         case LWS_CALLBACK_CLIENT_ESTABLISHED:
-            lwsl_user("Binance Connected\n");
+            lwsl_user("Binance Connected (%s)\n", client ? client->timeframe : "?");
+            if (client) client->wsi = wsi;
             lws_callback_on_writable(wsi);
             break;
 
         case LWS_CALLBACK_CLIENT_WRITEABLE: {
-            char *payload = get_subscribe_payload();
-            size_t n = strlen(payload);
-            unsigned char *buf = malloc(LWS_PRE + n);
-            memcpy(&buf[LWS_PRE], payload, n);
-            lws_write(wsi, &buf[LWS_PRE], n, LWS_WRITE_TEXT);
-            free(buf);
-            free(payload);
+            if (client) {
+                char *payload = get_subscribe_payload(client->timeframe);
+                size_t n = strlen(payload);
+                unsigned char *buf = malloc(LWS_PRE + n);
+                memcpy(&buf[LWS_PRE], payload, n);
+                lws_write(wsi, &buf[LWS_PRE], n, LWS_WRITE_TEXT);
+                free(buf);
+                free(payload);
+            }
             break;
         }
 
@@ -400,13 +399,13 @@ int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
         }
 
         case LWS_CALLBACK_CLIENT_CLOSED:
-            wsi_binance = NULL;
-            lwsl_warn("Binance Closed\n");
+            if (client) client->wsi = NULL;
+            lwsl_warn("Binance Closed (%s)\n", client ? client->timeframe : "?");
             break;
 
         case LWS_CALLBACK_CLIENT_CONNECTION_ERROR:
-            wsi_binance = NULL;
-            lwsl_err("Binance Connection Error\n");
+            if (client) client->wsi = NULL;
+            lwsl_err("Binance Connection Error (%s)\n", client ? client->timeframe : "?");
             break;
 
         default:
