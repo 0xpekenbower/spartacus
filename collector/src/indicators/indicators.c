@@ -63,7 +63,7 @@ static double* get_series_by_name(char *type, double *open, double *high, double
     return close;
 }
 
-cJSON* calculate_indicators(Candle *candles, size_t count) {
+cJSON* calculate_indicators(Candle *candles, size_t count, const char *timeframe) {
     if (!candles || count < 30) return NULL;
     if (!app_config.json) return NULL;
 
@@ -71,7 +71,12 @@ cJSON* calculate_indicators(Candle *candles, size_t count) {
     if (!indicators_config) return NULL;
 
     // Try to find timeframe specific config
-    if (candles[0].i[0]) {
+    if (timeframe) {
+        cJSON *tf_config = cJSON_GetObjectItem(indicators_config, timeframe);
+        if (tf_config) {
+            indicators_config = tf_config;
+        }
+    } else if (candles[0].i[0]) {
         cJSON *tf_config = cJSON_GetObjectItem(indicators_config, candles[0].i);
         if (tf_config) {
             indicators_config = tf_config;

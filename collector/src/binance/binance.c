@@ -369,7 +369,7 @@ int callback_binance(struct lws *wsi, enum lws_callback_reasons reason,
                     Candle *linear_candles = malloc(sizeof(Candle) * buf_storage->count);
                     size_t count = circular_to_linear(buf_storage, linear_candles);
                     
-                    cJSON *ind_json = calculate_indicators(linear_candles, count);
+                    cJSON *ind_json = calculate_indicators(linear_candles, count, candle.i);
                     
                     if (ind_json) {
                         char *indicators_str = cJSON_PrintUnformatted(ind_json);
